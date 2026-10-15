@@ -101,12 +101,15 @@ ruby rt{font-size:.5em}
 #reader.v #content{padding-inline-end:2px}
 
 #app.reading{background:var(--page)}
-#bg{position:fixed;inset:0;z-index:0;display:none;background-size:cover;background-position:center;background-repeat:no-repeat}
+#bg{position:fixed;inset:0;z-index:0;display:none;background-color:var(--page);background-repeat:no-repeat}
 #bg::after{content:"";position:absolute;inset:0;background:var(--page);opacity:var(--veil,.7)}
 #app.reading.hasbg #bg{display:block}
 #app.reading.hasbg{background:transparent}
 #app.hasbg #stage{background:transparent}
 #read{position:relative;z-index:1}
+#bgprev{position:relative;height:170px;aspect-ratio:var(--ar,.5);margin-inline:auto;border:1px solid var(--line);border-radius:4px;overflow:hidden;background-color:var(--page);background-repeat:no-repeat}
+#bgprev .pv{position:absolute;inset:0;background:var(--page);opacity:var(--veil,.7)}
+#bgbox{display:flex;flex-direction:column;gap:14px}
 .rbar{display:flex;align-items:center;gap:6px;padding-block:6px 4px;min-height:52px}
 .tbtn{border:0;background:transparent;color:var(--muted);font-size:14px;font-weight:500;padding:10px 8px;border-radius:6px;white-space:nowrap;line-height:1.2}
 .tbtn:active{background:var(--line)}
@@ -131,6 +134,29 @@ body.chrome-off .bar,body.chrome-off #foot{visibility:hidden}
 .seg button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-fg);font-weight:700}
 .set input[type=range]{width:100%;accent-color:var(--accent)}
 @media (prefers-reduced-motion:no-preference){#sheet{animation:up .18s ease-out}@keyframes up{from{transform:translateY(16px);opacity:0}}}
+
+/* 続きから読む */
+#resume{display:flex;align-items:center;gap:12px;border:1px solid var(--line);background:var(--panel);border-radius:10px;padding:12px 14px;margin-bottom:14px}
+#resume .rt{flex:1;min-width:0}
+#resume .rt b{display:block;font-size:14px;line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#resume .rt small{color:var(--muted);font-size:12px}
+/* 目次 */
+#toc{position:fixed;inset:0;z-index:7;background:var(--bg);color:var(--fg);display:flex;flex-direction:column;font-family:var(--font-ui)}
+#toc .th{display:flex;align-items:center;gap:6px;padding:6px max(10px,env(safe-area-inset-left,0px)) 6px;min-height:52px;border-bottom:1px solid var(--line)}
+#toc .tt{flex:1;min-width:0;text-align:center}
+#toc .tt b{display:block;font-size:14px;line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#toc .tt small{font-size:11px;color:var(--muted)}
+#toc .tl{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:8px}
+#toc .tin{max-width:640px;margin-inline:auto}
+#toc .ch{padding:16px 16px 6px;font-size:12px;font-weight:700;color:var(--accent);letter-spacing:.04em}
+#toc .it{display:flex;align-items:baseline;gap:10px;width:100%;text-align:left;border:0;border-bottom:1px solid var(--line);background:transparent;color:inherit;padding:12px 16px;min-height:46px;font-size:15px;line-height:1.5}
+#toc .it:active{background:var(--line)}
+#toc .it .n{flex:none;min-width:2.4em;color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
+#toc .it[aria-current="true"]{background:color-mix(in srgb,var(--accent) 12%,transparent);font-weight:700}
+#toc .it[aria-current="true"]::after{content:"読書中";flex:none;margin-left:auto;font-size:11px;color:var(--accent)}
+#toc .tf{display:flex;align-items:center;gap:6px;border-top:1px solid var(--line);padding:6px max(10px,env(safe-area-inset-left,0px)) calc(6px + env(safe-area-inset-bottom,0px));min-height:50px}
+#toc .tf select{flex:1;min-width:0;border:1px solid var(--line);background:var(--panel);color:inherit;border-radius:6px;padding:8px;font-size:13px}
+#toc .tmsg{padding:36px 20px;text-align:center;color:var(--muted);font-size:14px;line-height:1.7}
 </style>
 </head>
 <body>
@@ -140,6 +166,10 @@ body.chrome-off .bar,body.chrome-off #foot{visibility:hidden}
   <section id="input">
     <div class="bar"><h1>縦書きリーダー</h1></div>
     <div class="wrap">
+      <div id="resume" hidden>
+        <div class="rt"><b id="rs-t"></b><small id="rs-s"></small></div>
+        <button class="btn primary" id="rs-go">続きから読む</button>
+      </div>
       <h2>コピーした本文を、読みやすく整えて読む</h2>
       <div class="tabs" id="tabs">
         <button data-m="web" aria-pressed="true">なろうのURLから</button>
@@ -152,7 +182,7 @@ body.chrome-off .bar,body.chrome-off #foot{visibility:hidden}
         <label class="f" for="api">取得用スクリプトのURL(自分でデプロイしたもの)
           <input type="text" id="api" inputmode="url" placeholder="https://script.google.com/macros/s/.../exec">
         </label>
-        <div class="row"><button class="btn primary" id="fetch">取得して読む</button></div>
+        <div class="row"><button class="btn primary" id="fetch">取得して読む</button><button class="btn" id="tocopen">目次を見る</button></div>
         <div id="msg" role="status"></div>
         <p class="hint">取得用スクリプトは同梱の <b>Code.gs</b> です。Google Apps Scriptに貼り付けて、ウェブアプリ(アクセスできるユーザー：全員)としてデプロイし、できたURLを上の欄に入れます。一度入れればこのブラウザに保存されます。読むのは個人利用の範囲にしてください。</p>
       </div>
@@ -177,6 +207,7 @@ body.chrome-off .bar,body.chrome-off #foot{visibility:hidden}
     <div class="rbar">
       <button class="tbtn" id="back" aria-label="入力画面に戻る">‹ 戻る</button>
       <h1 id="hdr"></h1>
+      <button class="tbtn" id="tocbtn" aria-label="目次と話一覧" hidden>目次</button>
       <button class="tbtn" id="gear" aria-expanded="false" aria-controls="sheet">設定</button>
     </div>
     <div id="stage"><div id="reader" class="v" tabindex="0"><div id="content"></div></div></div>
@@ -187,6 +218,20 @@ body.chrome-off .bar,body.chrome-off #foot{visibility:hidden}
       <button class="tbtn" id="nep" aria-label="次の話へ" hidden>次話 ›</button>
     </div>
   </section>
+
+  <div id="toc" hidden role="dialog" aria-label="目次">
+    <div class="th">
+      <button class="tbtn" id="tocx">‹ 閉じる</button>
+      <div class="tt"><b id="toc-t"></b><small id="toc-a"></small></div>
+      <span style="width:4.2em"></span>
+    </div>
+    <div class="tl" id="toc-l"><div class="tin" id="toc-in"></div></div>
+    <div class="tf">
+      <button class="tbtn" id="toc-p">‹ 前</button>
+      <select id="toc-s" aria-label="表示する範囲"></select>
+      <button class="tbtn" id="toc-n">次 ›</button>
+    </div>
+  </div>
 
   <div id="sheet" hidden>
     <div class="in">
@@ -200,7 +245,16 @@ body.chrome-off .bar,body.chrome-off #foot{visibility:hidden}
         <button data-v="auto">自動</button><button data-v="paper">白</button><button data-v="sepia">セピア</button><button data-v="night">黒</button></div></div>
       <div class="set"><span>背景</span><div class="seg">
         <button type="button" id="bgpick">画像を選ぶ</button><button type="button" id="bgclear">なし</button></div></div>
-      <div class="set" id="bgrow"><span>背景の濃さ</span><input type="range" id="s-bgv" min="0" max="100" step="5" aria-label="背景の濃さ"></div>
+      <div id="bgbox">
+        <div id="bgprev" aria-hidden="true"><div class="pv"></div></div>
+        <div class="set"><span>表示</span><div class="seg" id="s-bgfit">
+          <button type="button" data-v="contain">全体を表示</button><button type="button" data-v="cover">画面いっぱい</button></div></div>
+        <div class="set"><span>拡大</span><input type="range" id="s-bgz" min="100" max="300" step="5" aria-label="画像の拡大"></div>
+        <div class="set"><span>左右の位置</span><input type="range" id="s-bgx" min="0" max="100" step="1" aria-label="画像の左右の位置"></div>
+        <div class="set"><span>上下の位置</span><input type="range" id="s-bgy" min="0" max="100" step="1" aria-label="画像の上下の位置"></div>
+        <div class="set"><span>背景の濃さ</span><input type="range" id="s-bgv" min="0" max="100" step="5" aria-label="背景の濃さ"></div>
+        <button type="button" class="btn" id="bgreset">サイズと位置を戻す</button>
+      </div>
       <input type="file" id="bgfile" accept="image/*" hidden>
       <div id="bgnote" class="hint"></div>
       <button class="btn primary" id="close">閉じる</button>
@@ -226,7 +280,7 @@ body.chrome-off .bar,body.chrome-off #foot{visibility:hidden}
     "　線路の向こうで、街の灯りが雨に滲んでいた。"
   ].join("\n");
 
-  var st={title:"",text:"",dir:"v",fs:20,lh:1.9,font:"mincho",skin:"auto",pos:0,reading:false,ncode:"",ep:0,api:"",hasPrev:false,hasNext:false,mode:"web",bgv:30};
+  var st={title:"",text:"",dir:"v",fs:20,lh:1.9,font:"mincho",skin:"auto",pos:0,reading:false,ncode:"",ep:0,api:"",hasPrev:false,hasNext:false,mode:"web",bgv:30,bgfit:"contain",bgz:100,bgx:50,bgy:50,anchor:null,work:"",author:""};
   try{var raw=localStorage.getItem(KEY);if(raw){var o=JSON.parse(raw);for(var k in o){if(k in st)st[k]=o[k];}}}catch(e){}
   function save(){try{localStorage.setItem(KEY,JSON.stringify(st));}catch(e){}}
 
@@ -270,18 +324,48 @@ body.chrome-off .bar,body.chrome-off #foot{visibility:hidden}
     document.title=st.title?st.title+" - なろうリーダー":"なろうリーダー";
     applyBg();
     var web=!!st.ncode;
-    $("pep").hidden=!web;$("nep").hidden=!web;
+    $("pep").hidden=!web;$("nep").hidden=!web;$("tocbtn").hidden=!web;
     $("pep").disabled=!st.hasPrev;$("nep").disabled=!st.hasNext;
   }
-  function applyBg(){
-    var el=$("bg");
+  var bgNat={w:0,h:0,k:""};
+  function bgKey(){return bgData?bgData.length+":"+bgData.slice(-32):"";}
+  function paintBg(el,W,H){
     el.style.backgroundImage=bgData?'url("'+bgData+'")':"";
-    el.style.setProperty("--veil",String(1-st.bgv/100));
-    app.classList.toggle("hasbg",!!bgData);
-    $("s-bgv").value=st.bgv;
-    $("bgrow").hidden=!bgData;
-    $("bgclear").disabled=!bgData;
+    if(!bgData)return;
+    if(!bgNat.w){el.style.backgroundSize="contain";el.style.backgroundPosition="center";return;}
+    var s0=(st.bgfit==="cover"?Math.max:Math.min)(W/bgNat.w,H/bgNat.h),z=st.bgz/100;
+    el.style.backgroundSize=(bgNat.w*s0*z)+"px "+(bgNat.h*s0*z)+"px";
+    el.style.backgroundPosition=st.bgx+"% "+st.bgy+"%";
   }
+  function applyBg(){
+    var el=$("bg"),pv=$("bgprev"),veil=String(1-st.bgv/100);
+    el.style.setProperty("--veil",veil);pv.style.setProperty("--veil",veil);
+    app.classList.toggle("hasbg",!!bgData);
+    $("s-bgv").value=st.bgv;$("s-bgz").value=st.bgz;$("s-bgx").value=st.bgx;$("s-bgy").value=st.bgy;
+    [].forEach.call($("s-bgfit").querySelectorAll("button"),function(b){b.setAttribute("aria-pressed",b.dataset.v===st.bgfit?"true":"false")});
+    $("bgbox").hidden=!bgData;
+    $("bgclear").disabled=!bgData;
+    if(!bgData){el.style.backgroundImage="";pv.style.backgroundImage="";bgNat={w:0,h:0,k:""};return;}
+    if(bgNat.k!==bgKey()){
+      var key=bgKey(),im=new Image();
+      im.onload=function(){if(key!==bgKey())return;bgNat={w:im.naturalWidth,h:im.naturalHeight,k:key};applyBg();};
+      im.src=bgData;
+      paintBg(el,1,1);paintBg(pv,1,1);
+      return;
+    }
+    var VW=document.documentElement.clientWidth||window.innerWidth,VH=window.innerHeight,ar=VW/VH;
+    pv.style.setProperty("--ar",String(ar));
+    paintBg(el,VW,VH);paintBg(pv,170*ar,170);
+  }
+  function bgChanged(){applyBg();save();}
+  $("s-bgz").oninput=function(){st.bgz=+$("s-bgz").value;bgChanged();};
+  $("s-bgx").oninput=function(){st.bgx=+$("s-bgx").value;bgChanged();};
+  $("s-bgy").oninput=function(){st.bgy=+$("s-bgy").value;bgChanged();};
+  $("s-bgfit").addEventListener("click",function(e){
+    var b=e.target.closest("button");if(!b)return;st.bgfit=b.dataset.v;bgChanged();
+  });
+  $("bgreset").onclick=function(){st.bgfit="contain";st.bgz=100;st.bgx=50;st.bgy=50;bgChanged();};
+  var bgRsz;window.addEventListener("resize",function(){clearTimeout(bgRsz);bgRsz=setTimeout(applyBg,120);});
   $("bgpick").onclick=function(){$("bgfile").click()};
   $("bgclear").onclick=function(){
     bgData="";try{localStorage.removeItem(BGKEY);}catch(e){}
@@ -309,7 +393,7 @@ body.chrome-off .bar,body.chrome-off #foot{visibility:hidden}
   });
 
   /* ページ送り: 行の位置を測って、行が途中で切れないページの区切りを作る */
-  var pages=[0],pageEnds=[0],pageIdx=0,lockUntil=0,PAD_START=28,PAD_END=10,saveT,snapT,rszT;
+  var pages=[0],pageEnds=[0],lastLines=[],pageIdx=0,lockUntil=0,PAD_START=28,PAD_END=10,saveT,snapT,rszT;
   function vert(){return st.dir==="v"}
   function viewSize(){return vert()?reader.clientWidth:reader.clientHeight}
   function offset(){return Math.abs(vert()?reader.scrollLeft:reader.scrollTop)}
@@ -323,34 +407,96 @@ body.chrome-off .bar,body.chrome-off #foot{visibility:hidden}
     for(var i=0;i<pages.length;i++){var d=Math.abs(pages[i]-o);if(d<bd){bd=d;best=i;}}
     return best;
   }
-  function measureLines(){
-    var c=reader.getBoundingClientRect(),o=offset(),v=vert(),rects=[],lines=[];
-    var tw=document.createTreeWalker(content,NodeFilter.SHOW_TEXT,{acceptNode:function(n){
+  function textWalker(root){
+    return document.createTreeWalker(root,NodeFilter.SHOW_TEXT,{acceptNode:function(n){
       var pn=n.parentNode&&n.parentNode.nodeName;
       if(pn==="RT"||pn==="RP"||!n.nodeValue.trim())return NodeFilter.FILTER_REJECT;
       return NodeFilter.FILTER_ACCEPT;
     }});
-    var rg=document.createRange(),n;
+  }
+  /* 行の始まりの位置(読み始め側からの距離) */
+  function rectS(r){
+    var c=reader.getBoundingClientRect(),o=offset();
+    return vert()?(c.right-r.right)+o:r.top-c.top+o;
+  }
+  function measureLines(){
+    var c=reader.getBoundingClientRect(),o=offset(),v=vert(),rects=[],lines=[],order=0;
+    var tw=textWalker(content),rg=document.createRange(),n;
     while((n=tw.nextNode())){
       rg.selectNodeContents(n);
       var rs=rg.getClientRects();
       for(var i=0;i<rs.length;i++){
         var r=rs[i];if(r.width<0.5||r.height<0.5)continue;
-        rects.push(v?[(c.right-r.right)-o,(c.right-r.left)-o]:[r.top-c.top+o,r.bottom-c.top+o]);
+        var se=v?[(c.right-r.right)+o,(c.right-r.left)+o]:[r.top-c.top+o,r.bottom-c.top+o];
+        rects.push({s:se[0],e:se[1],n:n,k:order++});
       }
     }
-    rects.sort(function(a,b){return a[0]-b[0]});
+    rects.sort(function(a,b){return a.s-b.s});
     for(var j=0;j<rects.length;j++){
       var L=lines[lines.length-1],t=rects[j];
-      if(L&&Math.abs(t[0]-L.s)<2){L.e=Math.max(L.e,t[1]);}
-      else lines.push({s:t[0],e:t[1]});
+      if(L&&Math.abs(t.s-L.s)<2){
+        L.e=Math.max(L.e,t.e);
+        if(t.k<L.k){L.k=t.k;L.n=t.n;}
+      }else lines.push({s:t.s,e:t.e,n:t.n,k:t.k});
     }
     return lines;
   }
+  /* いま見えているページの先頭の文字を「何段落目の何文字目」で表す */
+  function anchorOf(i){
+    if(!lastLines.length)return null;
+    var base=pages[i]||0,j=0;
+    for(;j<lastLines.length;j++){if(lastLines[j].s>=base+1)break;}
+    if(j>=lastLines.length)j=lastLines.length-1;
+    var L=lastLines[j],n=L.n;
+    if(!n||!n.parentNode||!content.contains(n))return null;
+    var el=n.parentNode.nodeType===1?n.parentNode:n.parentNode.parentNode,p=el&&el.closest?el.closest("p"):null;
+    if(!p)return null;
+    var pi=[].indexOf.call(content.querySelectorAll("p"),p);
+    if(pi<0)return null;
+    var tw=textWalker(p),m,acc=0,found=-1,rg=document.createRange();
+    while((m=tw.nextNode())){
+      if(m===n){
+        for(var c=0;c<m.nodeValue.length;c++){
+          rg.setStart(m,c);rg.setEnd(m,c+1);
+          var rr=rg.getClientRects()[0];
+          if(rr&&rr.width>=0.5&&Math.abs(rectS(rr)-L.s)<2){found=acc+c;break;}
+        }
+        if(found<0)found=acc;
+        break;
+      }
+      acc+=m.nodeValue.length;
+    }
+    return found<0?null:{pi:pi,off:found};
+  }
+  function sOfAnchor(a){
+    if(!a)return null;
+    var p=content.querySelectorAll("p")[a.pi];if(!p)return null;
+    var tw=textWalker(p),m,acc=0;
+    while((m=tw.nextNode())){
+      var len=m.nodeValue.length;
+      if(a.off<acc+len){
+        var c=a.off-acc,rg=document.createRange();
+        rg.setStart(m,c);rg.setEnd(m,Math.min(len,c+1));
+        var rr=rg.getClientRects()[0];
+        return rr?rectS(rr):null;
+      }
+      acc+=len;
+    }
+    return null;
+  }
+  function goAnchor(a){
+    var sv=sOfAnchor(a);if(sv==null)return false;
+    var idx=0;
+    for(var i=0;i<pages.length;i++){if(pages[i]<=sv+0.5)idx=i;}
+    pageIdx=idx;scrollToOffset(pages[idx],false);applyClip(idx);showProgress();
+    return true;
+  }
   function layoutPages(keepRatio){
     var W=viewSize(),last=pages[pages.length-1]||0,r=last>0?offset()/last:0;
+    var anc=keepRatio?anchorOf(nearest(offset())):null;
     var sp=$("spacer");if(sp)sp.style.blockSize="0px";
-    var lines=measureLines(),ps=[0],ends=[],o=0,guard=0,rubyAllow=st.fs*0.6;
+    var lines=measureLines();lastLines=lines;
+    var ps=[0],ends=[],o=0,guard=0,rubyAllow=st.fs*0.6;
     while(guard++<20000){
       var limit=o+W-PAD_END,k=-1;
       for(var i=0;i<lines.length;i++){if(lines[i].e>limit&&lines[i].s>o+1){k=i;break;}}
@@ -364,6 +510,7 @@ body.chrome-off .bar,body.chrome-off #foot{visibility:hidden}
     }
     pages=ps;pageEnds=ends;
     if(sp)sp.style.blockSize=W+"px";
+    if(anc&&goAnchor(anc))return;
     pageIdx=keepRatio?nearest(r*ps[ps.length-1]):0;
     scrollToOffset(ps[pageIdx],false);
     applyClip(pageIdx);
@@ -392,7 +539,21 @@ body.chrome-off .bar,body.chrome-off #foot{visibility:hidden}
     pageIdx=i;lockUntil=Date.now()+500;
     applyClip(i);
     scrollToOffset(pages[i],smooth!==false);
+    persistAt(i);
   }
+  /* 読んでいる位置を保存(アプリを閉じても続きから読めるように) */
+  function persistAt(i){
+    var last=pages[pages.length-1]||0;
+    st.pos=last>0?pages[i]/last:0;
+    st.anchor=anchorOf(i);
+    save();
+  }
+  function persistNow(){
+    if(readV.hidden||!st.reading)return;
+    persistAt(Date.now()<lockUntil?pageIdx:nearest(offset()));
+  }
+  document.addEventListener("visibilitychange",function(){if(document.hidden)persistNow();});
+  window.addEventListener("pagehide",persistNow);
   function page(dir){ /* dir: 1=進む, -1=戻る */
     var ni=nearest(offset())+dir;
     if(Date.now()<lockUntil)ni=pageIdx+dir;
@@ -407,7 +568,7 @@ body.chrome-off .bar,body.chrome-off #foot{visibility:hidden}
     if(Date.now()<lockUntil){snapT=setTimeout(settle,140);return;}
     var o=offset(),i=nearest(o);
     if(Math.abs(pages[i]-o)>1.5){go(i,true);}else{pageIdx=i;applyClip(i);}
-    st.pos=ratio();save();
+    persistAt(pageIdx);
   }
   reader.addEventListener("scroll",function(){
     showProgress();
@@ -462,13 +623,14 @@ body.chrome-off .bar,body.chrome-off #foot{visibility:hidden}
     requestAnimationFrame(function(){
       reader.scrollLeft=0;reader.scrollTop=0;
       layoutPages(false);
-      if(restore)setRatio(st.pos||0);else st.pos=0;
+      if(restore){if(!goAnchor(st.anchor))setRatio(st.pos||0);}
+      else{st.pos=0;st.anchor=null;}
       showProgress();
     });
     save();
   }
   function openInput(){
-    st.reading=false;readV.hidden=true;inputV.hidden=false;app.classList.remove("reading");sheet.hidden=true;gear.setAttribute("aria-expanded","false");save();
+    st.reading=false;readV.hidden=true;inputV.hidden=false;app.classList.remove("reading");sheet.hidden=true;gear.setAttribute("aria-expanded","false");refreshResume();save();
   }
   $("go").onclick=function(){openRead(false)};
   $("back").onclick=openInput;
@@ -489,6 +651,8 @@ body.chrome-off .bar,body.chrome-off #foot{visibility:hidden}
       .then(function(r){return r.json()})
       .then(function(d){
         if(d.error)throw new Error(d.error);
+        if(st.ncode!==ncode){st.work="";st.author="";}
+        if(tocWork&&tocWork.ncode===ncode){st.work=tocWork.title;st.author=tocWork.author;}
         st.api=api;st.ncode=ncode;st.ep=ep;st.title=d.title||"";st.text=d.body||"";
         st.hasPrev=!!d.hasPrev;st.hasNext=!!d.hasNext;
         msg("");openRead(false,true);
@@ -506,6 +670,93 @@ body.chrome-off .bar,body.chrome-off #foot{visibility:hidden}
   };
   $("pep").onclick=function(){if(st.ep>1)fetchEp(st.ncode,st.ep-1,true)};
   $("nep").onclick=function(){fetchEp(st.ncode,st.ep+1,true)};
+  /* ---- 続きから読む ---- */
+  function refreshResume(){
+    var box=$("resume");
+    if(!st.text||!st.text.trim()){box.hidden=true;return;}
+    var head=st.ncode?(st.work||"なろう作品"):(st.title||"貼り付けた本文");
+    var sub=(st.ncode?(st.ep+"話目 "+(st.title?"「"+st.title+"」 ":"")):"")+Math.round((st.pos||0)*100)+"%まで読了";
+    $("rs-t").textContent=head;$("rs-s").textContent=sub;box.hidden=false;
+  }
+  $("rs-go").onclick=function(){openRead(true,!!st.ncode)};
+
+  /* ---- 目次・話一覧 ---- */
+  var tocCache={},tocNcode="",tocPage=1,tocTok=0,tocWork=null;
+  function apiBase(){
+    var api=($("api").value||st.api||"").trim();
+    return /^https:\/\/script\.google\.com\//.test(api)?api:"";
+  }
+  function tocMsg(t){var d=document.createElement("div");d.className="tmsg";d.textContent=t;var o=$("toc-in");o.textContent="";o.appendChild(d);}
+  function openToc(ncode,page){
+    var api=apiBase();
+    if(!api){msg("取得用スクリプトのURLを入れてください。",true);return;}
+    tocNcode=ncode;tocPage=page;$("toc").hidden=false;
+    var key=ncode+":"+page,tok=++tocTok;
+    if(tocCache[key]){renderToc(tocCache[key]);return;}
+    $("toc-t").textContent=st.ncode===ncode&&st.work?st.work:"目次";$("toc-a").textContent="";
+    tocMsg("目次を取得中…");
+    fetch(api+(api.indexOf("?")>-1?"&":"?")+"ncode="+encodeURIComponent(ncode)+"&list=1&p="+page)
+      .then(function(r){return r.json()})
+      .then(function(d){
+        if(tok!==tocTok)return;
+        if(d.error)throw new Error(d.error);
+        if(!d.episodes)throw new Error("取得用スクリプトが古い版です");
+        tocCache[key]=d;
+        if(st.ncode===ncode&&d.title){st.work=d.title;st.author=d.author||"";save();refreshResume();}
+        renderToc(d);
+      })
+      .catch(function(e){
+        if(tok!==tocTok)return;
+        tocMsg("目次を取得できませんでした。"+(e&&e.message?"("+e.message+")":"")+"\n取得用スクリプトを最新のCode.gsに更新して、再デプロイしてあるか確認してください。");
+        $("toc-s").innerHTML="";
+      });
+  }
+  function renderToc(d){
+    $("toc-t").textContent=d.title||"目次";$("toc-a").textContent=d.author||"";
+    var o=$("toc-in");o.textContent="";
+    var lastCh=null,cur=null;
+    d.episodes.forEach(function(e){
+      if(e.chapter&&e.chapter!==lastCh){
+        var h=document.createElement("div");h.className="ch";h.textContent=e.chapter;o.appendChild(h);
+      }
+      lastCh=e.chapter;
+      var b=document.createElement("button");b.className="it";b.dataset.ep=e.ep;
+      var n=document.createElement("span");n.className="n";n.textContent=e.ep;
+      var t=document.createElement("span");t.textContent=e.title||(e.ep+"話");
+      b.appendChild(n);b.appendChild(t);
+      if(st.ncode===d.ncode&&st.ep===e.ep){b.setAttribute("aria-current","true");cur=b;}
+      o.appendChild(b);
+    });
+    var sel=$("toc-s");sel.textContent="";
+    for(var i=1;i<=d.lastPage;i++){
+      var op=document.createElement("option");op.value=i;op.textContent=((i-1)*100+1)+"話〜"+(i<d.lastPage?i*100+"話":"")+"  ("+i+"/"+d.lastPage+")";
+      if(i===d.page)op.selected=true;sel.appendChild(op);
+    }
+    $("toc-p").disabled=d.page<=1;$("toc-n").disabled=d.page>=d.lastPage;
+    $("toc-l").scrollTop=0;
+    if(cur)requestAnimationFrame(function(){$("toc-l").scrollTop=Math.max(0,cur.offsetTop-$("toc-l").clientHeight/3);});
+  }
+  function closeToc(){$("toc").hidden=true;tocTok++;}
+  $("toc-in").addEventListener("click",function(e){
+    var b=e.target.closest(".it");if(!b)return;
+    var ep=parseInt(b.dataset.ep,10),fromReader=!readV.hidden&&st.ncode===tocNcode;
+    tocWork={ncode:tocNcode,title:$("toc-t").textContent,author:$("toc-a").textContent};
+    closeToc();
+    fetchEp(tocNcode,ep,fromReader);
+  });
+  $("tocx").onclick=closeToc;
+  $("toc-p").onclick=function(){openToc(tocNcode,tocPage-1)};
+  $("toc-n").onclick=function(){openToc(tocNcode,tocPage+1)};
+  $("toc-s").onchange=function(){openToc(tocNcode,parseInt(this.value,10))};
+  $("tocbtn").onclick=function(){if(st.ncode)openToc(st.ncode,Math.max(1,Math.ceil(st.ep/100)))};
+  $("tocopen").onclick=function(){
+    var u=parseUrl($("url").value);
+    if(!u&&st.ncode)u={ncode:st.ncode,ep:st.ep};
+    if(!u){msg("なろうの作品URLを入れてください。",true);return;}
+    msg("");openToc(u.ncode,u.ncode===st.ncode?Math.max(1,Math.ceil(st.ep/100)):1);
+  };
+  document.addEventListener("keydown",function(e){if(e.key==="Escape"&&!$("toc").hidden)closeToc();});
+
   function setMode(m){
     st.mode=m;
     $("m-web").hidden=m!=="web";$("m-paste").hidden=m!=="paste";
@@ -519,8 +770,13 @@ body.chrome-off .bar,body.chrome-off #foot{visibility:hidden}
   $("close").onclick=function(){sheet.hidden=true;gear.setAttribute("aria-expanded","false")};
 
   function relayout(fn){
-    var r=ratio();fn();applyView();render();
-    requestAnimationFrame(function(){reader.scrollLeft=0;reader.scrollTop=0;layoutPages(false);setRatio(r);showProgress();});
+    var r=ratio(),anc=anchorOf(nearest(offset()));
+    fn();applyView();render();
+    requestAnimationFrame(function(){
+      reader.scrollLeft=0;reader.scrollTop=0;layoutPages(false);
+      if(!goAnchor(anc))setRatio(r);
+      showProgress();persistNow();
+    });
     save();
   }
   function bindSeg(id,key){
@@ -540,6 +796,7 @@ body.chrome-off .bar,body.chrome-off #foot{visibility:hidden}
   if(st.ncode)$("url").value="https://ncode.syosetu.com/"+st.ncode+"/"+st.ep+"/";
   setMode(st.mode==="paste"?"paste":"web");
   applyView();
+  refreshResume();
   if(st.reading&&st.text)openRead(true,!!st.ncode);
 })();
 </script>
