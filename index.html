@@ -660,22 +660,44 @@ body.chrome-off .bar,body.chrome-off #foot{visibility:hidden}
     var m=/ncode\.syosetu\.com\/(n[0-9a-z]+)(?:\/(\d+))?/i.exec(u);
     return m?{ncode:m[1].toLowerCase(),ep:m[2]?parseInt(m[2],10):1}:null;
   }
-  var epCache={},epBusy={},pending=null;
+  var epBusy={},pending=null,EPK="narou-reader-eps",epMem=null;
+  /* 取得済みの話を端末に残して、同じ話を読み直すときはスクリプトを使わない(最新話は未更新の恐れがあるので残さない) */
+  function epLoad(){
+    if(epMem)return epMem;
+    try{epMem=JSON.parse(localStorage.getItem(EPK)||"[]");}catch(e){epMem=[];}
+    if(!Array.isArray(epMem))epMem=[];
+    return epMem;
+  }
+  function epGet(k){
+    var a=epLoad();
+    for(var i=0;i<a.length;i++)if(a[i].k===k)return a[i].d;
+    return null;
+  }
+  function epPut(k,d){
+    if(!d||d.error||!d.body||!d.hasNext)return;
+    var a=epLoad().filter(function(x){return x.k!==k;});
+    a.push({k:k,d:d});
+    while(a.length>40)a.shift();
+    epMem=a;
+    for(var t=0;t<6;t++){
+      try{localStorage.setItem(EPK,JSON.stringify(epMem));return;}catch(e){if(epMem.length<=1)return;epMem.shift();}
+    }
+  }
   function epUrl(api,ncode,ep){return api+(api.indexOf("?")>-1?"&":"?")+"ncode="+encodeURIComponent(ncode)+"&ep="+ep;}
   function prefetchNext(){
     var api=apiBase();if(!api||!st.ncode||!st.hasNext)return;
     var n=st.ncode,e=st.ep+1,k=n+":"+e;
-    if(epCache[k]||epBusy[k])return;
+    if(epGet(k)||epBusy[k])return;
     epBusy[k]=1;
     fetch(epUrl(api,n,e)).then(function(r){return r.json()}).then(function(d){
-      if(d&&!d.error&&d.body){var ks=Object.keys(epCache);if(ks.length>3)delete epCache[ks[0]];epCache[k]=d;}
+      if(d&&!d.error&&d.body)epPut(k,d);
     }).catch(function(){}).then(function(){delete epBusy[k];});
   }
   function fetchEp(ncode,ep,fromReader){
     var api=($("api").value||st.api||"").trim();
     if(!/^https:\/\/script\.google\.com\//.test(api)){msg("取得用スクリプトのURLを入れてください。",true);return;}
     if(fromReader){$("pct").textContent="取得中";}else{msg("取得中…");}
-    (epCache[ncode+":"+ep]?Promise.resolve(epCache[ncode+":"+ep]):fetch(epUrl(api,ncode,ep)).then(function(r){return r.json()}))
+    (epGet(ncode+":"+ep)?Promise.resolve(epGet(ncode+":"+ep)):fetch(epUrl(api,ncode,ep)).then(function(r){return r.json()}))
       .then(function(d){
         if(d.error)throw new Error(d.error);
         if(st.ncode!==ncode){st.work="";st.author="";}
@@ -685,6 +707,7 @@ body.chrome-off .bar,body.chrome-off #foot{visibility:hidden}
         var rs=false;
         if(pending&&pending.ncode===ncode&&pending.ep===ep){st.anchor=pending.anchor;st.pos=pending.pos||0;rs=true;}
         pending=null;
+        epPut(ncode+":"+ep,d);
         shelfSync();
         msg("");openRead(rs,true);
       })
