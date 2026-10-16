@@ -792,7 +792,7 @@ body.chrome-off .bar,body.chrome-off #foot{visibility:hidden}
   /* 起動時の状態 */
   $("ttl").value=st.title;$("src").value=st.text;
   if(!st.text){$("ttl").value=SAMPLE_TITLE;$("src").value=SAMPLE_TEXT;}
-  $("api").value=st.api;
+  $("api").value=st.api||"https://script.google.com/macros/s/AKfycbwrixqTGWgzIDFPayVfd7GrU3aYJcAskQ1gF_RyOlJVJpjcPwWxfZqI50MjOf1CjPFkpQ/exec";
   $("url").value="https://ncode.syosetu.com/"+(st.ncode||"n2267be")+"/"+(st.ncode?st.ep:1)+"/";
   setMode(st.mode==="paste"?"paste":"web");
   applyView();
