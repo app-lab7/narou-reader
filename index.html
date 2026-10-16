@@ -140,6 +140,16 @@ body.chrome-off .bar,body.chrome-off #foot{visibility:hidden}
 #resume .rt{flex:1;min-width:0}
 #resume .rt b{display:block;font-size:14px;line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #resume .rt small{color:var(--muted);font-size:12px}
+/* 本棚 */
+#shelf{margin-bottom:14px}
+#shelf .sh{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+#shelf .sh b{font-size:13px;color:var(--muted);font-weight:600}
+#shelf .bk{display:flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--panel);border-radius:10px;margin-bottom:8px}
+#shelf .bk .go{flex:1;min-width:0;text-align:left;border:0;background:transparent;color:inherit;padding:11px 4px 11px 14px;font:inherit}
+#shelf .bk .go b{display:block;font-size:14px;line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#shelf .bk .go small{color:var(--muted);font-size:12px}
+#shelf .bk .nw{display:inline-block;margin-left:6px;padding:0 6px;border-radius:8px;background:var(--accent);color:var(--accent-fg);font-size:11px;font-weight:600;vertical-align:1px}
+#shelf .bk .rm{border:0;background:transparent;color:var(--muted);font-size:18px;padding:8px 12px;line-height:1}
 /* 目次 */
 #toc{position:fixed;inset:0;z-index:7;background:var(--bg);color:var(--fg);display:flex;flex-direction:column;font-family:var(--font-ui)}
 #toc .th{display:flex;align-items:center;gap:6px;padding:6px max(10px,env(safe-area-inset-left,0px)) 6px;min-height:52px;border-bottom:1px solid var(--line)}
@@ -169,6 +179,10 @@ body.chrome-off .bar,body.chrome-off #foot{visibility:hidden}
       <div id="resume" hidden>
         <div class="rt"><b id="rs-t"></b><small id="rs-s"></small></div>
         <button class="btn primary" id="rs-go">続きから読む</button>
+      </div>
+      <div id="shelf" hidden>
+        <div class="sh"><b>本棚</b><button class="tbtn" id="sh-chk">新着を確認</button></div>
+        <div id="sh-l"></div>
       </div>
       <h2>コピーした本文を、読みやすく整えて読む</h2>
       <div class="tabs" id="tabs">
@@ -207,6 +221,7 @@ body.chrome-off .bar,body.chrome-off #foot{visibility:hidden}
     <div class="rbar">
       <button class="tbtn" id="back" aria-label="入力画面に戻る">‹ 戻る</button>
       <h1 id="hdr"></h1>
+      <button class="tbtn" id="favbtn" hidden aria-label="本棚に追加">☆ 本棚</button>
       <button class="tbtn" id="tocbtn" aria-label="目次と話一覧" hidden>目次</button>
       <button class="tbtn" id="gear" aria-expanded="false" aria-controls="sheet">設定</button>
     </div>
@@ -280,7 +295,7 @@ body.chrome-off .bar,body.chrome-off #foot{visibility:hidden}
     "　線路の向こうで、街の灯りが雨に滲んでいた。"
   ].join("\n");
 
-  var st={title:"",text:"",dir:"v",fs:20,lh:1.9,font:"mincho",skin:"auto",pos:0,reading:false,ncode:"",ep:0,api:"",hasPrev:false,hasNext:false,mode:"web",bgv:30,bgfit:"contain",bgz:100,bgx:50,bgy:50,anchor:null,work:"",author:""};
+  var st={title:"",text:"",dir:"v",fs:20,lh:1.9,font:"mincho",skin:"auto",pos:0,reading:false,ncode:"",ep:0,api:"",hasPrev:false,hasNext:false,mode:"web",bgv:30,bgfit:"contain",bgz:100,bgx:50,bgy:50,anchor:null,shelf:[],work:"",author:""};
   try{var raw=localStorage.getItem(KEY);if(raw){var o=JSON.parse(raw);for(var k in o){if(k in st)st[k]=o[k];}}}catch(e){}
   function save(){try{localStorage.setItem(KEY,JSON.stringify(st));}catch(e){}}
 
@@ -324,7 +339,7 @@ body.chrome-off .bar,body.chrome-off #foot{visibility:hidden}
     document.title=st.title?st.title+" - なろうリーダー":"なろうリーダー";
     applyBg();
     var web=!!st.ncode;
-    $("pep").hidden=!web;$("nep").hidden=!web;$("tocbtn").hidden=!web;
+    $("favbtn").hidden=!web;favLabel();$("pep").hidden=!web;$("nep").hidden=!web;$("tocbtn").hidden=!web;
     $("pep").disabled=!st.hasPrev;$("nep").disabled=!st.hasNext;
   }
   var bgNat={w:0,h:0,k:""};
@@ -546,6 +561,8 @@ body.chrome-off .bar,body.chrome-off #foot{visibility:hidden}
     var last=pages[pages.length-1]||0;
     st.pos=last>0?pages[i]/last:0;
     st.anchor=anchorOf(i);
+    shelfSync();
+    if(st.pos>0.6)prefetchNext();
     save();
   }
   function persistNow(){
@@ -643,21 +660,36 @@ body.chrome-off .bar,body.chrome-off #foot{visibility:hidden}
     var m=/ncode\.syosetu\.com\/(n[0-9a-z]+)(?:\/(\d+))?/i.exec(u);
     return m?{ncode:m[1].toLowerCase(),ep:m[2]?parseInt(m[2],10):1}:null;
   }
+  var epCache={},epBusy={},pending=null;
+  function epUrl(api,ncode,ep){return api+(api.indexOf("?")>-1?"&":"?")+"ncode="+encodeURIComponent(ncode)+"&ep="+ep;}
+  function prefetchNext(){
+    var api=apiBase();if(!api||!st.ncode||!st.hasNext)return;
+    var n=st.ncode,e=st.ep+1,k=n+":"+e;
+    if(epCache[k]||epBusy[k])return;
+    epBusy[k]=1;
+    fetch(epUrl(api,n,e)).then(function(r){return r.json()}).then(function(d){
+      if(d&&!d.error&&d.body){var ks=Object.keys(epCache);if(ks.length>3)delete epCache[ks[0]];epCache[k]=d;}
+    }).catch(function(){}).then(function(){delete epBusy[k];});
+  }
   function fetchEp(ncode,ep,fromReader){
     var api=($("api").value||st.api||"").trim();
     if(!/^https:\/\/script\.google\.com\//.test(api)){msg("取得用スクリプトのURLを入れてください。",true);return;}
     if(fromReader){$("pct").textContent="取得中";}else{msg("取得中…");}
-    fetch(api+(api.indexOf("?")>-1?"&":"?")+"ncode="+encodeURIComponent(ncode)+"&ep="+ep)
-      .then(function(r){return r.json()})
+    (epCache[ncode+":"+ep]?Promise.resolve(epCache[ncode+":"+ep]):fetch(epUrl(api,ncode,ep)).then(function(r){return r.json()}))
       .then(function(d){
         if(d.error)throw new Error(d.error);
         if(st.ncode!==ncode){st.work="";st.author="";}
         if(tocWork&&tocWork.ncode===ncode){st.work=tocWork.title;st.author=tocWork.author;}
         st.api=api;st.ncode=ncode;st.ep=ep;st.title=d.title||"";st.text=d.body||"";
         st.hasPrev=!!d.hasPrev;st.hasNext=!!d.hasNext;
-        msg("");openRead(false,true);
+        var rs=false;
+        if(pending&&pending.ncode===ncode&&pending.ep===ep){st.anchor=pending.anchor;st.pos=pending.pos||0;rs=true;}
+        pending=null;
+        shelfSync();
+        msg("");openRead(rs,true);
       })
       .catch(function(e){
+        pending=null;
         var t="取得できませんでした。"+(e&&e.message?"("+e.message+")":"");
         if(fromReader){applyView();showProgress();}
         msg(t,true);
@@ -670,8 +702,79 @@ body.chrome-off .bar,body.chrome-off #foot{visibility:hidden}
   };
   $("pep").onclick=function(){if(st.ep>1)fetchEp(st.ncode,st.ep-1,true)};
   $("nep").onclick=function(){fetchEp(st.ncode,st.ep+1,true)};
+  /* ---- 本棚 ---- */
+  function shelfFind(n){for(var i=0;i<st.shelf.length;i++)if(st.shelf[i].ncode===n)return st.shelf[i];return null;}
+  function shelfSync(){
+    if(!st.ncode)return;var b=shelfFind(st.ncode);if(!b)return;
+    b.ep=st.ep;b.anchor=st.anchor;b.pos=st.pos;
+    if(st.work){b.title=st.work;}if(st.author){b.author=st.author;}
+  }
+  function favLabel(){
+    var on=!!(st.ncode&&shelfFind(st.ncode)),f=$("favbtn");
+    f.textContent=on?"★ 本棚":"☆ 本棚";f.setAttribute("aria-pressed",on?"true":"false");
+    f.setAttribute("aria-label",on?"本棚から外す":"本棚に追加");
+  }
+  $("favbtn").onclick=function(){
+    if(!st.ncode)return;
+    var b=shelfFind(st.ncode);
+    if(b){st.shelf=st.shelf.filter(function(x){return x!==b;});}
+    else{st.shelf.unshift({ncode:st.ncode,title:st.work||"",author:st.author||"",ep:st.ep,anchor:st.anchor,pos:st.pos,latest:0,known:0,checked:0});checkShelf(false);}
+    favLabel();save();
+  };
+  function renderShelf(){
+    var box=$("shelf"),l=$("sh-l");
+    l.textContent="";
+    if(!st.shelf.length){box.hidden=true;return;}
+    box.hidden=false;
+    st.shelf.forEach(function(b){
+      var row=document.createElement("div");row.className="bk";
+      var go=document.createElement("button");go.className="go";go.type="button";
+      var t=document.createElement("b");t.textContent=b.title||(b.ncode);
+      if(b.latest>(b.known||0)){var nw=document.createElement("span");nw.className="nw";nw.textContent="新着 "+(b.latest-b.known)+"話";t.appendChild(nw);}
+      var sm=document.createElement("small");
+      sm.textContent=(b.ep||1)+"話目まで"+(b.latest?" / 全"+b.latest+"話":"")+(b.author?"  "+b.author:"");
+      go.appendChild(t);go.appendChild(sm);
+      go.onclick=function(){openShelf(b);};
+      var rm=document.createElement("button");rm.className="rm";rm.type="button";rm.textContent="×";rm.setAttribute("aria-label","本棚から外す");
+      rm.onclick=function(){if(confirm("「"+(b.title||b.ncode)+"」を本棚から外しますか?")){st.shelf=st.shelf.filter(function(x){return x!==b;});save();renderShelf();}};
+      row.appendChild(go);row.appendChild(rm);l.appendChild(row);
+    });
+  }
+  function openShelf(b){
+    b.known=Math.max(b.known||0,b.latest||0);save();
+    if(st.ncode===b.ncode&&st.ep===b.ep&&st.text){openRead(true,true);return;}
+    pending={ncode:b.ncode,ep:b.ep||1,anchor:b.anchor,pos:b.pos};
+    fetchEp(b.ncode,b.ep||1,false);
+  }
+  function getList(api,ncode,p){
+    return fetch(api+(api.indexOf("?")>-1?"&":"?")+"ncode="+encodeURIComponent(ncode)+"&list=1&p="+p)
+      .then(function(r){return r.json()}).then(function(d){if(d.error||!d.episodes)throw new Error(d.error||"old");return d;});
+  }
+  function checkShelf(force){
+    var api=apiBase();if(!api||!st.shelf.length)return;
+    var now=Date.now(),chk=$("sh-chk");
+    var jobs=[];
+    st.shelf.forEach(function(b){
+      if(!force&&now-(b.checked||0)<3600000)return;
+      b.checked=now;
+      jobs.push(getList(api,b.ncode,1).then(function(d){
+        if(d.title)b.title=d.title;if(d.author)b.author=d.author;
+        return d.lastPage>1?getList(api,b.ncode,d.lastPage):d;
+      }).then(function(d){
+        var m=0;d.episodes.forEach(function(e){if(e.ep>m)m=e.ep;});
+        if(m){if(!b.known)b.known=m;b.latest=m;}
+      }).catch(function(){}));
+    });
+    if(!jobs.length)return;
+    chk.disabled=true;chk.textContent="確認中…";
+    Promise.all(jobs).then(function(){chk.disabled=false;chk.textContent="新着を確認";save();renderShelf();});
+  }
+  $("sh-chk").onclick=function(){checkShelf(true);};
+  document.addEventListener("visibilitychange",function(){if(!document.hidden&&!inputV.hidden)checkShelf(false);});
+
   /* ---- 続きから読む ---- */
   function refreshResume(){
+    renderShelf();
     var box=$("resume");
     if(!st.text||!st.text.trim()){box.hidden=true;return;}
     var head=st.ncode?(st.work||"なろう作品"):(st.title||"貼り付けた本文");
@@ -797,6 +900,7 @@ body.chrome-off .bar,body.chrome-off #foot{visibility:hidden}
   setMode(st.mode==="paste"?"paste":"web");
   applyView();
   refreshResume();
+  checkShelf(false);
   if(st.reading&&st.text)openRead(true,!!st.ncode);
 })();
 </script>
